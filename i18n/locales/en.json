@@ -1,0 +1,11 @@
+{
+  "hello": "Hello World",
+  "index": {
+    "seo": {
+      "title": "LocalSend Web",
+      "description": "Share files between your browser and other devices running LocalSend."
+    },
+    "empty": "Open LocalSend on another device.",
+    "emptyHint": "Open this site in another browser or use a native version (v1.17.0 or newer)."
+  }
+}
