@@ -1,11 +1,13 @@
 {
-  "hello": "Hallo Welt",
   "index": {
     "seo": {
       "title": "LocalSend Web",
       "description": "Teile Dateien zwischen deinem Browser und anderen Geräten, auf denen LocalSend ausgeführt wird."
     },
-    "empty": "Öffne LocalSend auf einem anderen Gerät.",
-    "emptyHint": "Öffne diese Seite in einem anderen Browser oder verwende eine native Version (v1.17.0 oder neuer)."
+    "empty": {
+      "title": "Öffne LocalSend auf einem anderen Gerät.",
+      "deviceHint": "Öffne diese Seite in einem anderen Browser oder native Version (v1.17.0 oder neuer).",
+      "lanHint": "Nur Geräte im selben Netzwerk werden angezeigt."
+    }
   }
 }
