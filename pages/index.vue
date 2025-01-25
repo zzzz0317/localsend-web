@@ -14,7 +14,7 @@
       <h3>{{ t('index.empty.lanHint') }}</h3>
     </div>
 
-    <div v-else class="flex justify-center px-2 mt-12">
+    <div v-else class="flex justify-center px-4 mt-12">
       <div class="w-96">
         <PeerCard v-for="peer in store.peers" :key="peer.id" :peer="peer" class="mb-4" />
       </div>
