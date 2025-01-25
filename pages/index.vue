@@ -8,13 +8,18 @@
       </div>
     </div>
 
-    <div v-if="store.peers.length === 0" class="flex-1 flex flex-col items-center justify-center pt-4 text-center px-2">
+    <div v-if="store.client" class="text-center mt-8 pb-8">
+      {{ t('index.you') }}<br>
+      <span class="font-bold">{{ store.client.alias }}</span>
+    </div>
+
+    <div v-if="store.peers.length === 0" class="flex-1 flex flex-col items-center justify-center text-center px-2">
       <h3 class="text-3xl">{{ t('index.empty.title') }}</h3>
       <h3 class="mt-2">{{ t('index.empty.deviceHint') }}</h3>
       <h3>{{ t('index.empty.lanHint') }}</h3>
     </div>
 
-    <div v-else class="flex justify-center px-4 mt-12">
+    <div v-else class="flex justify-center px-4">
       <div class="w-96">
         <PeerCard v-for="peer in store.peers" :key="peer.id" :peer="peer" class="mb-4" />
       </div>
@@ -33,6 +38,9 @@ import {
   SignalingConnection, type WsServerMessage
 } from "@/services/signaling";
 import {store} from "@/services/store";
+import {getAgentInfoString} from "~/utils/userAgent";
+import {protocolVersion} from "~/services/webrtc";
+import {generateRandomAlias} from "~/utils/alias";
 
 definePageMeta({
   title: "index.seo.title",
@@ -44,11 +52,13 @@ const {t} = useI18n();
 const signaling = ref<SignalingConnection | null>(null);
 
 onMounted(async () => {
+  const userAgent = navigator.userAgent;
+
   const info = {
-    alias: "Cute Orange",
-    version: "2.3",
-    deviceModel: "Samsung",
-    deviceType: PeerDeviceType.mobile,
+    alias: generateRandomAlias(),
+    version: protocolVersion,
+    deviceModel: getAgentInfoString(userAgent),
+    deviceType: PeerDeviceType.web,
     fingerprint: "123456",
   }
 
@@ -91,6 +101,7 @@ onMounted(async () => {
 });
 
 const onHello = (m: HelloMessage) => {
+  store.client = m.client;
   store.peers = m.peers;
 };
 

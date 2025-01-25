@@ -8,6 +8,7 @@
       "title": "Öffne LocalSend auf einem anderen Gerät.",
       "deviceHint": "Öffne diese Seite in einem anderen Browser oder native Version (v1.17.0 oder neuer).",
       "lanHint": "Nur Geräte im selben Netzwerk werden angezeigt."
-    }
+    },
+    "you": "Du bist:"
   }
 }
