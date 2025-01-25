@@ -62,7 +62,7 @@ onMounted(async () => {
     version: protocolVersion,
     deviceModel: getAgentInfoString(userAgent),
     deviceType: PeerDeviceType.web,
-    fingerprint: "123456",
+    fingerprint: Math.random().toString(),
   }
 
   await setupConnection(info);
