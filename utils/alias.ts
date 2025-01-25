@@ -69,7 +69,6 @@ const fruits = [
 ];
 
 export function generateRandomAlias(): string {
-    console.log(`Entropy: ${adjectives.length * fruits.length}`);
     const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
     const fruit = fruits[Math.floor(Math.random() * fruits.length)];
     return `${adjective} ${fruit}`;

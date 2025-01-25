@@ -13,7 +13,11 @@
       <span class="font-bold">{{ store.client.alias }}</span>
     </div>
 
-    <div v-if="store.peers.length === 0" class="flex-1 flex flex-col items-center justify-center text-center px-2">
+    <div v-if="!store.signaling" class="flex-1 flex flex-col items-center justify-center text-center px-2">
+      <h3 v-if="minDelayFinished" class="text-3xl">{{ t('index.connecting') }}</h3>
+    </div>
+
+    <div v-else-if="store.peers.length === 0" class="flex-1 flex flex-col items-center justify-center text-center px-2">
       <h3 class="text-3xl">{{ t('index.empty.title') }}</h3>
       <h3 class="mt-2">{{ t('index.empty.deviceHint') }}</h3>
       <h3>{{ t('index.empty.lanHint') }}</h3>
@@ -29,15 +33,9 @@
 
 <script setup lang="ts">
 import {
-  type AnswerMessage,
-  type HelloMessage,
-  type JoinedMessage,
-  type LeftMessage,
-  type OfferMessage,
   PeerDeviceType,
-  SignalingConnection, type WsServerMessage
 } from "@/services/signaling";
-import {store} from "@/services/store";
+import {setupConnection, store} from "@/services/store";
 import {getAgentInfoString} from "~/utils/userAgent";
 import {protocolVersion} from "~/services/webrtc";
 import {generateRandomAlias} from "~/utils/alias";
@@ -49,9 +47,14 @@ definePageMeta({
 
 const {t} = useI18n();
 
-const signaling = ref<SignalingConnection | null>(null);
+const minDelayFinished = ref(false);
 
 onMounted(async () => {
+  setTimeout(() => {
+    // to prevent flickering during initial connection
+    minDelayFinished.value = true;
+  }, 1000);
+
   const userAgent = navigator.userAgent;
 
   const info = {
@@ -62,65 +65,8 @@ onMounted(async () => {
     fingerprint: "123456",
   }
 
-  const existingConnection = store.signaling;
-
-  const onMessage = (data: WsServerMessage) => {
-    console.log(`Received message: ${JSON.stringify(data)}`);
-    switch (data.type) {
-      case "hello":
-        onHello(data);
-        break;
-      case "joined":
-        onJoined(data);
-        break;
-      case "left":
-        onLeft(data);
-        break;
-      case "offer":
-        onOffer(data);
-        break;
-      case "answer":
-        onAnswer(data);
-        break;
-    }
-  };
-
-  if (existingConnection) {
-    existingConnection.onMessage(onMessage);
-    signaling.value = existingConnection;
-  } else {
-    const newConnection = await SignalingConnection.connect({
-      url: "wss://public.localsend.org/v1/ws",
-      info,
-      onMessage: onMessage,
-      onClose: () => store.signaling = null,
-    });
-    store.signaling = newConnection;
-    signaling.value = newConnection;
-  }
+  await setupConnection(info);
 });
-
-const onHello = (m: HelloMessage) => {
-  store.client = m.client;
-  store.peers = m.peers;
-};
-
-const onJoined = (m: JoinedMessage) => {
-  store.peers = [...store.peers, m.peer];
-};
-
-const onLeft = (m: LeftMessage) => {
-  store.peers = store.peers.filter((p) => p.id !== m.peerId);
-};
-
-const onOffer = (m: OfferMessage) => {
-  console.log("Received offer", m);
-}
-
-const onAnswer = (m: AnswerMessage) => {
-  console.log("Received answer", m);
-}
-
 </script>
 
 <style>

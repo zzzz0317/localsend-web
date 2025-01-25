@@ -4,6 +4,7 @@
       "title": "LocalSend Web",
       "description": "Share files between your browser and other devices running LocalSend."
     },
+    "connecting": "Connecting...",
     "empty": {
       "title": "Open LocalSend on another device.",
       "deviceHint": "Open this site in another browser or native version (v1.17.0 or newer).",

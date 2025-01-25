@@ -2,13 +2,9 @@ import { encodeBase64 } from "~/utils/base64";
 
 export class SignalingConnection {
     private _socket: WebSocket;
-    private _onMessage: OnMessageCallback;
-    private _onClose: () => void;
 
-    private constructor(socket: WebSocket, onMessage: OnMessageCallback, onClose: () => void) {
+    private constructor(socket: WebSocket) {
         this._socket = socket;
-        this._onMessage = onMessage;
-        this._onClose = onClose;
     }
 
     /**
@@ -36,33 +32,38 @@ export class SignalingConnection {
             const ws = new WebSocket(`${url}?d=${encodedInfo}`);
             ws.onopen = () => resolve(ws);
             ws.onerror = (err) => reject(err);
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data) as WsServerMessage;
+                onMessage(message);
+            };
         });
+
+        // ping every 120 seconds to keep the connection alive
+        const pingInterval = setInterval(() => {
+            socket.send('');
+        }, 120 * 1000);
+
+        socket.onclose = () => {
+            console.log('Signaling connection closed');
+            clearInterval(pingInterval);
+            onClose();
+        }
 
         console.log('Signaling connection established');
 
-        const instance = new SignalingConnection(socket, onMessage, onClose);
-        socket.onmessage = (event) => {
-            const message = JSON.parse(event.data) as WsServerMessage;
-            instance._onMessage(message);
-        }
-        socket.onclose = () => {
-            console.log('Signaling connection closed');
-            instance._onClose();
-        }
-
-        return instance;
+        return new SignalingConnection(socket);
     }
 
     public send(message: WsClientMessage) {
         this._socket.send(JSON.stringify(message));
     }
 
-    public onMessage(callback: OnMessageCallback) {
-        this._onMessage = callback;
-    }
-
-    public onClose(callback: () => void) {
-        this._onClose = callback;
+    public async waitUntilClose(): Promise<void> {
+        return new Promise((resolve) => {
+            this._socket.addEventListener('close', () => {
+                resolve();
+            });
+        });
     }
 }
 
