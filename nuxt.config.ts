@@ -1,11 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  compatibilityDate: '2024-11-01',
-  modules: [
-    "@nuxtjs/tailwindcss",
-    "@nuxtjs/i18n",
-    '@nuxt/icon',
-  ],
+  compatibilityDate: "2024-11-01",
+  modules: ["@nuxtjs/tailwindcss", "@nuxtjs/i18n", "@nuxt/icon"],
   devtools: { enabled: true },
   app: {
     head: {
@@ -30,14 +26,14 @@ export default defineNuxtConfig({
       {
         code: "de",
         language: "de-DE",
-        file: 'de.json',
-        name: 'Deutsch'
+        file: "de.json",
+        name: "Deutsch",
       },
       {
         code: "en",
         language: "en-US",
-        file: 'en.json',
-        name: 'English',
+        file: "en.json",
+        name: "English",
         isCatchallLocale: true,
       },
     ],
@@ -47,4 +43,4 @@ export default defineNuxtConfig({
       autoSubfolderIndex: false,
     },
   },
-})
+});

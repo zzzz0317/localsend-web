@@ -1,1 +1,5 @@
-export const protocolVersion = '2.3';
+export const protocolVersion = "2.3";
+
+// class SendingHandler {
+//   private
+// }

@@ -2,15 +2,15 @@
   <div v-if="i18nEnabled" class="flex items-center">
     <Icon name="material-symbols:translate" class="me-1 dark:text-white" />
     <select
-        v-bind:value="localeIdentity"
-        class="rounded-lg text-black dark:text-white bg-gray-200 dark:bg-gray-900"
-        :style="{ width: `${switchWidth}px` }"
-        @change="changeLocale"
+      v-bind:value="localeIdentity"
+      class="rounded-lg text-black dark:text-white bg-gray-200 dark:bg-gray-900"
+      :style="{ width: `${switchWidth}px` }"
+      @change="changeLocale"
     >
       <option
-          v-for="(locale, index) in locales"
-          :key="index"
-          :value="locale.code"
+        v-for="(locale, index) in locales"
+        :key="index"
+        :value="locale.code"
       >
         {{ locale.name }}
       </option>
@@ -31,10 +31,12 @@ const switchLocalePath = useSwitchLocalePath();
 
 const localeIdentity = ref("");
 const switchWidth = ref(0);
-const switchWidthRef = useTemplateRef('switch-width');
+const switchWidthRef = useTemplateRef("switch-width");
 
 const changeLocale = (e: Event) => {
   const target = e.target as HTMLSelectElement;
+
+  // @ts-ignore
   const path = switchLocalePath(target.value);
   navigateTo(path);
 
