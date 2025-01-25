@@ -1,15 +1,5 @@
 import { encodeBase64 } from "~/utils/base64";
 
-let connection: SignalingConnection | null = null;
-
-export function getSignalingConnection() {
-    return connection;
-}
-
-export function setSignalingConnection(conn: SignalingConnection | null) {
-    connection = conn;
-}
-
 export class SignalingConnection {
     private _socket: WebSocket;
     private _onMessage: OnMessageCallback;

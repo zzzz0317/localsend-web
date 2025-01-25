@@ -8,7 +8,7 @@
       </div>
     </div>
 
-    <div v-if="peers.length === 0" class="flex-1 flex flex-col items-center justify-center pt-4 text-center px-2">
+    <div v-if="store.peers.length === 0" class="flex-1 flex flex-col items-center justify-center pt-4 text-center px-2">
       <h3 class="text-3xl">{{ t('index.empty.title') }}</h3>
       <h3 class="mt-2">{{ t('index.empty.deviceHint') }}</h3>
       <h3>{{ t('index.empty.lanHint') }}</h3>
@@ -16,7 +16,7 @@
 
     <div v-else class="flex justify-center px-2 mt-12">
       <div class="w-96">
-        <PeerCard v-for="peer in peers" :key="peer.id" :peer="peer" class="mb-4" />
+        <PeerCard v-for="peer in store.peers" :key="peer.id" :peer="peer" class="mb-4" />
       </div>
     </div>
   </div>
@@ -25,14 +25,14 @@
 <script setup lang="ts">
 import {
   type AnswerMessage,
-  type ClientInfo, getSignalingConnection,
   type HelloMessage,
   type JoinedMessage,
   type LeftMessage,
   type OfferMessage,
-  PeerDeviceType, setSignalingConnection,
+  PeerDeviceType,
   SignalingConnection, type WsServerMessage
 } from "@/services/signaling";
+import {store} from "@/services/store";
 
 definePageMeta({
   title: "index.seo.title",
@@ -42,7 +42,6 @@ definePageMeta({
 const {t} = useI18n();
 
 const signaling = ref<SignalingConnection | null>(null);
-const peers = ref<ClientInfo[]>([]);
 
 onMounted(async () => {
   const info = {
@@ -53,7 +52,7 @@ onMounted(async () => {
     fingerprint: "123456",
   }
 
-  const existingConnection = getSignalingConnection();
+  const existingConnection = store.signaling;
 
   const onMessage = (data: WsServerMessage) => {
     console.log(`Received message: ${JSON.stringify(data)}`);
@@ -84,23 +83,23 @@ onMounted(async () => {
       url: "wss://public.localsend.org/v1/ws",
       info,
       onMessage: onMessage,
-      onClose: () => setSignalingConnection(null),
+      onClose: () => store.signaling = null,
     });
-    setSignalingConnection(newConnection);
+    store.signaling = newConnection;
     signaling.value = newConnection;
   }
 });
 
 const onHello = (m: HelloMessage) => {
-  peers.value = m.peers;
+  store.peers = m.peers;
 };
 
 const onJoined = (m: JoinedMessage) => {
-  peers.value = [...peers.value, m.peer];
+  store.peers = [...store.peers, m.peer];
 };
 
 const onLeft = (m: LeftMessage) => {
-  peers.value = peers.value.filter((p) => p.id !== m.peerId);
+  store.peers = store.peers.filter((p) => p.id !== m.peerId);
 };
 
 const onOffer = (m: OfferMessage) => {
