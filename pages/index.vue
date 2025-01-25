@@ -14,8 +14,10 @@
       <h3>{{ t('index.empty.lanHint') }}</h3>
     </div>
 
-    <div v-else class="m-auto w-96 mt-12">
-      <PeerCard v-for="peer in peers" :key="peer.id" :peer="peer" class="mb-4" />
+    <div v-else class="flex justify-center px-2 mt-12">
+      <div class="w-96">
+        <PeerCard v-for="peer in peers" :key="peer.id" :peer="peer" class="mb-4" />
+      </div>
     </div>
   </div>
 </template>
