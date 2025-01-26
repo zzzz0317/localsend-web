@@ -43,6 +43,7 @@
           :key="peer.id"
           :peer="peer"
           class="mb-4"
+          @click="selectPeer(peer.id)"
         />
       </div>
     </div>
@@ -50,11 +51,12 @@
 </template>
 
 <script setup lang="ts">
-import { PeerDeviceType } from "@/services/signaling";
+import { PeerDeviceType, SignalingConnection } from "@/services/signaling";
 import { setupConnection, store } from "@/services/store";
 import { getAgentInfoString } from "~/utils/userAgent";
-import { protocolVersion } from "~/services/webrtc";
+import { protocolVersion, SendingHandler } from "~/services/webrtc";
 import { generateRandomAlias } from "~/utils/alias";
+import { useFileDialog } from "@vueuse/core";
 
 definePageMeta({
   title: "index.seo.title",
@@ -63,7 +65,31 @@ definePageMeta({
 
 const { t } = useI18n();
 
+const { open: openFileDialog, onChange } = useFileDialog();
+
+onChange(async (files) => {
+  if (!files) return;
+
+  if (files.length === 0) return;
+
+  if (!store.signaling) return;
+
+  await SendingHandler.sendFiles({
+    signaling: store.signaling as SignalingConnection,
+    stunServers: [],
+    files,
+    targetId: targetId.value,
+  });
+});
+
 const minDelayFinished = ref(false);
+
+const targetId = ref("");
+
+const selectPeer = (id: string) => {
+  targetId.value = id;
+  openFileDialog();
+};
 
 onMounted(async () => {
   setTimeout(() => {
