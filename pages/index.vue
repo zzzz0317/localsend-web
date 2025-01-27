@@ -54,7 +54,7 @@
 import { PeerDeviceType, SignalingConnection } from "@/services/signaling";
 import { setupConnection, store } from "@/services/store";
 import { getAgentInfoString } from "~/utils/userAgent";
-import { protocolVersion, SendingHandler } from "~/services/webrtc";
+import { protocolVersion, sendFiles } from "~/services/webrtc";
 import { generateRandomAlias } from "~/utils/alias";
 import { useFileDialog } from "@vueuse/core";
 
@@ -74,7 +74,7 @@ onChange(async (files) => {
 
   if (!store.signaling) return;
 
-  await SendingHandler.sendFiles({
+  await sendFiles({
     signaling: store.signaling as SignalingConnection,
     stunServers: [],
     files,
