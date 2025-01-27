@@ -1,7 +1,8 @@
-import { encodeBase64 } from "~/utils/base64";
+import { encodeStringToBase64 } from "~/utils/base64";
 
 export class SignalingConnection {
   private _socket: WebSocket;
+  private _onAnswer: OnAnswer | null = null;
 
   private constructor(socket: WebSocket) {
     this._socket = socket;
@@ -27,15 +28,11 @@ export class SignalingConnection {
   }): Promise<SignalingConnection> {
     console.log(`Connecting to ${url}`);
 
-    const encodedInfo = encodeBase64(JSON.stringify(info));
+    const encodedInfo = encodeStringToBase64(JSON.stringify(info));
     const socket = await new Promise<WebSocket>((resolve, reject) => {
       const ws = new WebSocket(`${url}?d=${encodedInfo}`);
       ws.onopen = () => resolve(ws);
       ws.onerror = (err) => reject(err);
-      ws.onmessage = (event) => {
-        const message = JSON.parse(event.data) as WsServerMessage;
-        onMessage(message);
-      };
     });
 
     // ping every 120 seconds to keep the connection alive
@@ -51,11 +48,35 @@ export class SignalingConnection {
 
     console.log("Signaling connection established");
 
-    return new SignalingConnection(socket);
+    const instance = new SignalingConnection(socket);
+
+    socket.onmessage = (event) => {
+      const message = JSON.parse(event.data) as WsServerMessage;
+      if (
+        message.type === "answer" &&
+        instance._onAnswer &&
+        message.sessionId === instance._onAnswer.sessionId
+      ) {
+        instance._onAnswer.callback(message);
+        instance._onAnswer = null;
+      }
+      onMessage(message);
+    };
+
+    return instance;
   }
 
   public send(message: WsClientMessage) {
     this._socket.send(JSON.stringify(message));
+  }
+
+  public async waitForAnswer(sessionId: string): Promise<AnswerMessage> {
+    return await new Promise<AnswerMessage>((resolve) => {
+      this._onAnswer = {
+        sessionId,
+        callback: (message) => resolve(message),
+      };
+    });
   }
 
   public async waitUntilClose(): Promise<void> {
@@ -66,6 +87,11 @@ export class SignalingConnection {
     });
   }
 }
+
+type OnAnswer = {
+  sessionId: string;
+  callback: (message: AnswerMessage) => void;
+};
 
 export type ClientInfoWithoutId = {
   alias: string;

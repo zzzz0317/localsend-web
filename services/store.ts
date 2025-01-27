@@ -93,6 +93,4 @@ const onOffer = (m: OfferMessage) => {
   console.log("Received offer", m);
 };
 
-const onAnswer = (m: AnswerMessage) => {
-  console.log("Received answer", m);
-};
+const onAnswer = (_: AnswerMessage) => {};
