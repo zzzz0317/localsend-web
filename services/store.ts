@@ -1,14 +1,25 @@
 import type {
-  AnswerMessage,
   ClientInfo,
   ClientInfoWithoutId,
-  HelloMessage,
-  JoinedMessage,
-  LeftMessage,
-  OfferMessage,
   WsServerMessage,
 } from "~/services/signaling";
 import { SignalingConnection } from "~/services/signaling";
+import {type FileDto, sendFiles} from "~/services/webrtc";
+
+export enum SessionState {
+  idle = "idle",
+  sending = "sending",
+  receiving = "receiving",
+}
+
+export type FileState = {
+  id: string;
+  name: string;
+  curr: number;
+  total: number;
+  state: "pending" | "skipped" | "sending" | "finished" | "error";
+  error?: string;
+}
 
 export const store = reactive({
   // Whether the connection loop has started
@@ -25,6 +36,14 @@ export const store = reactive({
 
   // List of peers connected to the same room
   peers: [] as ClientInfo[],
+
+  // Current session information
+  session: {
+    state: SessionState.idle,
+    curr: 0,
+    total: 1, // Avoid division by zero
+    fileState: {} as Record<string, FileState>,
+  },
 });
 
 export async function setupConnection(info: ClientInfoWithoutId) {
@@ -45,19 +64,18 @@ async function connectionLoop() {
           console.log(`Received message: ${JSON.stringify(data)}`);
           switch (data.type) {
             case "hello":
-              onHello(data);
+              store.client = data.client;
+              store.peers = data.peers;
               break;
             case "joined":
-              onJoined(data);
+              store.peers = [...store.peers, data.peer];
               break;
             case "left":
-              onLeft(data);
+              store.peers = store.peers.filter((p) => p.id !== data.peerId);
               break;
             case "offer":
-              onOffer(data);
               break;
             case "answer":
-              onAnswer(data);
               break;
           }
         },
@@ -76,21 +94,81 @@ async function connectionLoop() {
   }
 }
 
-const onHello = (m: HelloMessage) => {
-  store.client = m.client;
-  store.peers = m.peers;
-};
+export async function startSendSession({
+  files,
+  targetId,
+}: {
+  files: FileList;
+  targetId: string;
+}): Promise<void> {
+  store.session.state = SessionState.sending;
+  const fileState: Record<string, FileState> = {};
 
-const onJoined = (m: JoinedMessage) => {
-  store.peers = [...store.peers, m.peer];
-};
+  const fileDtoList = convertFileListToDto(files);
+  const fileMap = fileDtoList.reduce(
+      (acc, file) => {
+        acc[file.id] = files[parseInt(file.id)];
+        fileState[file.id] = {
+          id: file.id,
+          name: file.fileName,
+          curr: 0,
+          total: file.size,
+          state: "pending",
+        };
+        return acc;
+      },
+      {} as Record<string, File>,
+  );
 
-const onLeft = (m: LeftMessage) => {
-  store.peers = store.peers.filter((p) => p.id !== m.peerId);
-};
+  store.session.fileState = fileState;
+  store.session.curr = 0;
+  store.session.total = fileDtoList.reduce((acc, file) => acc + file.size, 0);
 
-const onOffer = (m: OfferMessage) => {
-  console.log("Received offer", m);
-};
+  try {
+    await sendFiles({
+      signaling: store.signaling as SignalingConnection,
+      stunServers: [],
+      fileDtoList: fileDtoList,
+      fileMap: fileMap,
+      targetId: targetId,
+      onFilesSkip: (fileIds) => {
+        for (const id of fileIds) {
+          store.session.fileState[id].state = "skipped";
+        }
+      },
+      onFileProgress: (progress) => {
+        store.session.fileState[progress.id].curr = progress.curr;
+        store.session.curr = Object.values(store.session.fileState).reduce(
+            (acc, file) => acc + file.curr,
+            0,
+        );
+        if (progress.success) {
+          store.session.fileState[progress.id].state = "finished";
+        } else if (progress.error) {
+          store.session.fileState[progress.id].state = "error";
+          store.session.fileState[progress.id].error = progress.error;
+        }
+      },
+    });
+  } finally {
+    // store.session.state = SessionState.idle;
+  }
+}
 
-const onAnswer = (_: AnswerMessage) => {};
+function convertFileListToDto(files: FileList): FileDto[] {
+  const result: FileDto[] = [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    result.push({
+      id: i.toString(),
+      fileName: file.name,
+      size: file.size,
+      fileType: file.type,
+      metadata: {
+        modified: new Date(file.lastModified).toISOString(),
+      },
+    });
+  }
+
+  return result;
+}

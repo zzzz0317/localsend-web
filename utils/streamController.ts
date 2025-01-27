@@ -19,6 +19,20 @@ export class StreamController<T> {
     this._controller.enqueue(data);
   }
 
+  public async readNext(): Promise<T> {
+    const reader = this._stream.getReader();
+
+    try {
+      const { value, done } = await reader.read();
+      if (done) {
+        throw new Error("No more data");
+      }
+      return value as T;
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   public createAsyncIterator() {
     let reader: ReadableStreamDefaultReader<T>;
     const asyncIterator = this._createAsyncIterator((r) => (reader = r));

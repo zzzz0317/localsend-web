@@ -10,6 +10,10 @@
       "deviceHint": "Open this site in another browser or native version (v1.17.0 or newer).",
       "lanHint": "Only devices in the same network are shown."
     },
-    "you": "You are:"
+    "you": "You are:",
+    "progress": {
+      "titleSending": "Sending files...",
+      "titleReceiving": "Receiving files..."
+    }
   }
 }

@@ -47,16 +47,23 @@
         />
       </div>
     </div>
+
+    <SessionDialog />
   </div>
 </template>
 
 <script setup lang="ts">
-import { PeerDeviceType, SignalingConnection } from "@/services/signaling";
-import { setupConnection, store } from "@/services/store";
+import { PeerDeviceType } from "@/services/signaling";
+import {
+  setupConnection,
+  startSendSession,
+  store,
+} from "@/services/store";
 import { getAgentInfoString } from "~/utils/userAgent";
-import { protocolVersion, sendFiles } from "~/services/webrtc";
+import { protocolVersion } from "~/services/webrtc";
 import { generateRandomAlias } from "~/utils/alias";
 import { useFileDialog } from "@vueuse/core";
+import SessionDialog from "~/components/dialog/SessionDialog.vue";
 
 definePageMeta({
   title: "index.seo.title",
@@ -74,9 +81,7 @@ onChange(async (files) => {
 
   if (!store.signaling) return;
 
-  await sendFiles({
-    signaling: store.signaling as SignalingConnection,
-    stunServers: [],
+  await startSendSession({
     files,
     targetId: targetId.value,
   });
