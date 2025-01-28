@@ -46,13 +46,8 @@ export async function sendFiles({
   console.log("Creating offer...");
 
   const offer = await peerConnection.createOffer();
-
-  console.log(`Offer: ${offer.sdp}`);
-
-  await waitICEGathering(peerConnection);
-
   await peerConnection.setLocalDescription(offer);
-
+  await waitICEGathering(peerConnection);
   const localSdp = peerConnection.localDescription!.sdp;
 
   console.log("Local SDP: ", localSdp);
@@ -219,8 +214,8 @@ export async function receiveFiles({
 
   console.log("Creating answer...");
   const answer = await peerConnection.createAnswer();
-  await waitICEGathering(peerConnection);
   await peerConnection.setLocalDescription(answer);
+  await waitICEGathering(peerConnection);
   const localSdp = peerConnection.localDescription!.sdp;
 
   console.log("Local SDP: ", localSdp);
@@ -523,16 +518,15 @@ async function waitBufferEmpty(dataChannel: RTCDataChannel) {
 }
 
 async function waitICEGathering(localConnection: RTCPeerConnection) {
-  if (
-    localConnection.getConfiguration().iceServers?.length ||
-    localConnection.iceGatheringState === "complete"
-  ) {
-    await new Promise<void>((resolve) => {
-      localConnection.onicegatheringstatechange = () => {
-        if (localConnection.iceGatheringState === "complete") {
-          resolve();
-        }
-      };
-    });
+  if (localConnection.iceGatheringState === "complete") {
+    return;
   }
+
+  await new Promise<void>((resolve) => {
+    localConnection.onicegatheringstatechange = () => {
+      if (localConnection.iceGatheringState === "complete") {
+        resolve();
+      }
+    };
+  });
 }
