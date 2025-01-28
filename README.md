@@ -1,5 +1,9 @@
 # LocalSend Web App
 
+A web app integrating WebRTC and WebSockets to share files with other LocalSend peers (browsers, or native versions).
+
+Live: https://web.localsend.org
+
 ## Setup
 
 Make sure to install [pnpm](https://pnpm.io).
