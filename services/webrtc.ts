@@ -289,7 +289,6 @@ export async function receiveFiles({
   let fileState: { id: string; chunks: ArrayBuffer[]; curr: number } | null =
     null;
   for await (const chunk of dataChannelIterator.asyncIterator) {
-    console.log(`Received chunk type: ${typeof chunk}`);
     if (typeof chunk === "string") {
       if (fileState) {
         saveFileFromBytes(
