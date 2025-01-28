@@ -1,13 +1,13 @@
 <template>
   <transition name="fade">
     <div
-        v-if="props.visible"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+      v-if="props.visible"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
     >
       <div
-          class="bg-white w-full max-w-lg mx-4 rounded shadow-md text-black"
-          role="dialog"
-          aria-modal="true"
+        class="bg-white w-full max-w-lg mx-4 rounded shadow-md text-black"
+        role="dialog"
+        aria-modal="true"
       >
         <slot />
       </div>

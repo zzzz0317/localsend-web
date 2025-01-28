@@ -2,9 +2,16 @@ import type {
   ClientInfo,
   ClientInfoWithoutId,
   WsServerMessage,
+  WsServerSdpMessage,
 } from "~/services/signaling";
 import { SignalingConnection } from "~/services/signaling";
-import {type FileDto, sendFiles} from "~/services/webrtc";
+import {
+  defaultStun,
+  type FileDto,
+  type FileProgress,
+  receiveFiles,
+  sendFiles,
+} from "~/services/webrtc";
 
 export enum SessionState {
   idle = "idle",
@@ -19,7 +26,7 @@ export type FileState = {
   total: number;
   state: "pending" | "skipped" | "sending" | "finished" | "error";
   error?: string;
-}
+};
 
 export const store = reactive({
   // Whether the connection loop has started
@@ -74,6 +81,7 @@ async function connectionLoop() {
               store.peers = store.peers.filter((p) => p.id !== data.peerId);
               break;
             case "offer":
+              acceptOffer({ offer: data });
               break;
             case "answer":
               break;
@@ -106,18 +114,18 @@ export async function startSendSession({
 
   const fileDtoList = convertFileListToDto(files);
   const fileMap = fileDtoList.reduce(
-      (acc, file) => {
-        acc[file.id] = files[parseInt(file.id)];
-        fileState[file.id] = {
-          id: file.id,
-          name: file.fileName,
-          curr: 0,
-          total: file.size,
-          state: "pending",
-        };
-        return acc;
-      },
-      {} as Record<string, File>,
+    (acc, file) => {
+      acc[file.id] = files[parseInt(file.id)];
+      fileState[file.id] = {
+        id: file.id,
+        name: file.fileName,
+        curr: 0,
+        total: file.size,
+        state: "pending",
+      };
+      return acc;
+    },
+    {} as Record<string, File>,
   );
 
   store.session.fileState = fileState;
@@ -127,7 +135,7 @@ export async function startSendSession({
   try {
     await sendFiles({
       signaling: store.signaling as SignalingConnection,
-      stunServers: [],
+      stunServers: defaultStun,
       fileDtoList: fileDtoList,
       fileMap: fileMap,
       targetId: targetId,
@@ -136,22 +144,10 @@ export async function startSendSession({
           store.session.fileState[id].state = "skipped";
         }
       },
-      onFileProgress: (progress) => {
-        store.session.fileState[progress.id].curr = progress.curr;
-        store.session.curr = Object.values(store.session.fileState).reduce(
-            (acc, file) => acc + file.curr,
-            0,
-        );
-        if (progress.success) {
-          store.session.fileState[progress.id].state = "finished";
-        } else if (progress.error) {
-          store.session.fileState[progress.id].state = "error";
-          store.session.fileState[progress.id].error = progress.error;
-        }
-      },
+      onFileProgress: onFileProgress,
     });
   } finally {
-    // store.session.state = SessionState.idle;
+    store.session.state = SessionState.idle;
   }
 }
 
@@ -171,4 +167,49 @@ function convertFileListToDto(files: FileList): FileDto[] {
   }
 
   return result;
+}
+
+export async function acceptOffer({ offer }: { offer: WsServerSdpMessage }) {
+  store.session.state = SessionState.receiving;
+
+  try {
+    await receiveFiles({
+      signaling: store.signaling as SignalingConnection,
+      stunServers: defaultStun,
+      offer: offer,
+      selectFiles: async (files) => {
+        // Select all files
+        store.session.curr = 0;
+        store.session.total = files.reduce((acc, file) => acc + file.size, 0);
+        store.session.fileState = {};
+        for (const file of files) {
+          store.session.fileState[file.id] = {
+            id: file.id,
+            name: file.fileName,
+            curr: 0,
+            total: file.size,
+            state: "pending",
+          };
+        }
+        return files.map((file) => file.id);
+      },
+      onFileProgress: onFileProgress,
+    });
+  } finally {
+    store.session.state = SessionState.idle;
+  }
+}
+
+function onFileProgress(progress: FileProgress) {
+  store.session.fileState[progress.id].curr = progress.curr;
+  store.session.curr = Object.values(store.session.fileState).reduce(
+    (acc, file) => acc + file.curr,
+    0,
+  );
+  if (progress.success) {
+    store.session.fileState[progress.id].state = "finished";
+  } else if (progress.error) {
+    store.session.fileState[progress.id].state = "error";
+    store.session.fileState[progress.id].error = progress.error;
+  }
 }

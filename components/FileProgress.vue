@@ -10,8 +10,8 @@
 </template>
 
 <script setup lang="ts">
-import {formatBytes} from "~/utils/fileSize";
-import type {FileState} from "~/services/store";
+import { formatBytes } from "~/utils/fileSize";
+import type { FileState } from "~/services/store";
 
 const props = defineProps<{
   state: FileState;

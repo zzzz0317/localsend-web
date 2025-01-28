@@ -54,11 +54,7 @@
 
 <script setup lang="ts">
 import { PeerDeviceType } from "@/services/signaling";
-import {
-  setupConnection,
-  startSendSession,
-  store,
-} from "@/services/store";
+import { setupConnection, startSendSession, store } from "@/services/store";
 import { getAgentInfoString } from "~/utils/userAgent";
 import { protocolVersion } from "~/services/webrtc";
 import { generateRandomAlias } from "~/utils/alias";
