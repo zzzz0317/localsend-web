@@ -35,10 +35,7 @@ export async function sendFiles({
 
   const dataChannel = peerConnection.createDataChannel("data");
   dataChannel.binaryType = "arraybuffer";
-  const dataChannelStream = new StreamController<string | ArrayBuffer>();
-  dataChannel.onmessage = (event) => {
-    dataChannelStream.add(event.data);
-  };
+  const dataChannelStream = createStreamController(dataChannel);
   const dataChannelOpened = new Promise<void>((resolve) => {
     dataChannel.onopen = () => resolve();
   });
@@ -234,10 +231,7 @@ export async function receiveFiles({
 
   console.log("Received data channel");
 
-  const dataChannelStream = new StreamController<string | ArrayBuffer>();
-  dataChannel.onmessage = (event) => {
-    dataChannelStream.add(event.data);
-  };
+  const dataChannelStream = createStreamController(dataChannel);
 
   await new Promise<void>((resolve) => {
     dataChannel.onopen = () => resolve();
@@ -372,6 +366,14 @@ async function createPeerConnection(
   };
 
   return peerConnection;
+}
+
+function createStreamController(dataChannel: RTCDataChannel) {
+  const dataChannelStream = new StreamController<string | ArrayBuffer>();
+  dataChannel.onmessage = (event) => {
+    dataChannelStream.add(event.data);
+  };
+  return dataChannelStream;
 }
 
 export type FileProgress = {
