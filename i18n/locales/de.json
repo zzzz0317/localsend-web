@@ -11,6 +11,7 @@
       "lanHint": "Nur Geräte im selben Netzwerk werden angezeigt."
     },
     "you": "Du bist:",
+    "enterPin": "PIN eingeben",
     "progress": {
       "titleSending": "Sende Dateien...",
       "titleReceiving": "Empfange Dateien..."

@@ -105,9 +105,11 @@ async function connectionLoop() {
 export async function startSendSession({
   files,
   targetId,
+  onPin,
 }: {
   files: FileList;
   targetId: string;
+  onPin: () => Promise<string | null>;
 }): Promise<void> {
   store.session.state = SessionState.sending;
   const fileState: Record<string, FileState> = {};
@@ -139,6 +141,7 @@ export async function startSendSession({
       fileDtoList: fileDtoList,
       fileMap: fileMap,
       targetId: targetId,
+      onPin: onPin,
       onFilesSkip: (fileIds) => {
         for (const id of fileIds) {
           store.session.fileState[id].state = "skipped";

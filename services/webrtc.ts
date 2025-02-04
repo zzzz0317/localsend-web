@@ -17,6 +17,7 @@ export async function sendFiles({
   fileDtoList,
   fileMap,
   targetId,
+  onPin,
   onFilesSkip,
   onFileProgress,
 }: {
@@ -25,6 +26,7 @@ export async function sendFiles({
   fileDtoList: FileDto[];
   fileMap: Record<string, File>;
   targetId: string;
+  onPin: () => Promise<string | null>;
   onFilesSkip: (fileIds: string[]) => void;
   onFileProgress: (progress: FileProgress) => void;
 }) {
@@ -72,13 +74,42 @@ export async function sendFiles({
 
   await dataChannelOpened;
 
-  console.log("Data channel opened");
+  console.log("Data channel opened. Waiting for initial status...");
 
-  await waitBufferEmpty(dataChannel);
+  initLoop: while (true) {
+    const statusRaw = await dataChannelStream.readNext();
+    if (typeof statusRaw !== "string") {
+      throw new Error("Expected string");
+    }
+    const status = (JSON.parse(statusRaw) as RTCInitResponse).status;
+
+    console.log(`Received status: ${status}`);
+
+    switch (status) {
+      case RTCInitStatus.ok:
+        break initLoop;
+      case RTCInitStatus.pinRequired:
+        const pin = await onPin();
+        if (!pin) {
+          dataChannel.close();
+          return;
+        }
+
+        dataChannel.send(
+          JSON.stringify({
+            pin: pin,
+          } as RTCPinRequest),
+        );
+        continue;
+      case RTCInitStatus.tooManyRequests:
+        console.error("Too many requests");
+        return;
+    }
+  }
 
   sendStringInChunks(
     dataChannel,
-    JSON.stringify({ files: fileDtoList } as RTCInitialMessage),
+    JSON.stringify({ files: fileDtoList } as RTCFileListRequest),
   );
 
   sendDelimiter(dataChannel);
@@ -96,7 +127,7 @@ export async function sendFiles({
   dataChannelIterator.releaseLock();
 
   const fileTokens = (
-    JSON.parse(arrayBufferToString(chunks)) as RTCInitialResponse
+    JSON.parse(arrayBufferToString(chunks)) as RTCFileListResponse
   ).files;
 
   console.log(
@@ -184,12 +215,14 @@ export async function receiveFiles({
   signaling,
   stunServers,
   offer,
+  pin,
   selectFiles,
   onFileProgress,
 }: {
   signaling: SignalingConnection;
   stunServers: string[];
   offer: WsServerSdpMessage;
+  pin?: PinConfig;
   selectFiles: (files: FileDto[]) => Promise<string[]>;
   onFileProgress: (progress: FileProgress) => void;
 }) {
@@ -237,7 +270,52 @@ export async function receiveFiles({
     dataChannel.onopen = () => resolve();
   });
 
-  console.log("Data channel opened. Waiting for file list...");
+  console.log("Data channel opened.");
+
+  await waitBufferEmpty(dataChannel);
+
+  if (pin) {
+    let remotePin = "";
+    let pinTry = 0;
+
+    while (true) {
+      if (remotePin === pin.pin) {
+        break;
+      }
+
+      if (pinTry >= pin.maxTries) {
+        dataChannel.send(
+          JSON.stringify({
+            status: RTCInitStatus.tooManyRequests,
+          } as RTCInitResponse),
+        );
+
+        await waitBufferEmpty(dataChannel);
+        return;
+      }
+
+      dataChannel.send(
+        JSON.stringify({
+          status: RTCInitStatus.pinRequired,
+        } as RTCInitResponse),
+      );
+
+      const remotePinRaw = await dataChannelStream.readNext();
+      if (typeof remotePinRaw !== "string") {
+        throw new Error("Expected string");
+      }
+      remotePin = (JSON.parse(remotePinRaw) as RTCPinRequest).pin;
+      pinTry++;
+    }
+  }
+
+  dataChannel.send(
+    JSON.stringify({
+      status: RTCInitStatus.ok,
+    } as RTCInitResponse),
+  );
+
+  console.log("Waiting for file list...");
 
   let dataChannelIterator = dataChannelStream.createAsyncIterator();
   let chunks: ArrayBuffer[] = [];
@@ -250,7 +328,7 @@ export async function receiveFiles({
   dataChannelIterator.releaseLock();
 
   const fileList = (
-    JSON.parse(arrayBufferToString(chunks)) as RTCInitialMessage
+    JSON.parse(arrayBufferToString(chunks)) as RTCFileListRequest
   ).files;
 
   console.log("Received file list:", fileList);
@@ -272,7 +350,7 @@ export async function receiveFiles({
     dataChannel,
     JSON.stringify({
       files: selectedFilesTokens,
-    } as RTCInitialResponse),
+    } as RTCFileListResponse),
   );
 
   sendDelimiter(dataChannel);
@@ -376,6 +454,11 @@ function createStreamController(dataChannel: RTCDataChannel) {
   return dataChannelStream;
 }
 
+export type PinConfig = {
+  pin: string;
+  maxTries: number;
+};
+
 export type FileProgress = {
   id: string;
   curr: number;
@@ -398,11 +481,25 @@ export type FileMetadata = {
   accessed?: string;
 };
 
-type RTCInitialMessage = {
+type RTCInitResponse = {
+  status: RTCInitStatus;
+};
+
+enum RTCInitStatus {
+  ok = "ok",
+  pinRequired = "pinRequired",
+  tooManyRequests = "tooManyRequests",
+}
+
+type RTCPinRequest = {
+  pin: string;
+};
+
+type RTCFileListRequest = {
   files: FileDto[];
 };
 
-type RTCInitialResponse = {
+type RTCFileListResponse = {
   files: Record<string, string>;
 };
 

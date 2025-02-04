@@ -80,6 +80,9 @@ onChange(async (files) => {
   await startSendSession({
     files,
     targetId: targetId.value,
+    onPin: async () => {
+      return prompt(t("index.enterPin"));
+    },
   });
 });
 
