@@ -52,6 +52,7 @@ export class SignalingConnection {
 
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data) as WsServerMessage;
+      console.log(`WS in: ${event.data}`);
       if (
         message.type === "answer" &&
         instance._onAnswer &&
@@ -67,6 +68,7 @@ export class SignalingConnection {
   }
 
   public send(message: WsClientMessage) {
+    console.log(`WS out: ${JSON.stringify(message)}`);
     this._socket.send(JSON.stringify(message));
   }
 
@@ -113,8 +115,9 @@ export enum PeerDeviceType {
 
 export type WsServerMessage =
   | HelloMessage
-  | JoinedMessage
+  | JoinMessage
   | LeftMessage
+  | UpdateMessage
   | OfferMessage
   | AnswerMessage
   | ErrorMessage;
@@ -125,8 +128,13 @@ export type HelloMessage = {
   peers: ClientInfo[];
 };
 
-export type JoinedMessage = {
-  type: "joined";
+export type JoinMessage = {
+  type: "join";
+  peer: ClientInfo;
+};
+
+export type UpdateMessage = {
+  type: "update";
   peer: ClientInfo;
 };
 
@@ -152,7 +160,13 @@ export type ErrorMessage = {
 
 type OnMessageCallback = (message: WsServerMessage) => void;
 
-export type WsClientMessage = {
+export type WsClientMessage = WsClientUpdateMessage | WsClientSdpMessage;
+
+export type WsClientUpdateMessage = {
+  type: "update";
+} & ClientInfoWithoutId;
+
+export type WsClientSdpMessage = {
   type: "offer" | "answer";
   sessionId: string;
   target: string;

@@ -15,7 +15,7 @@
 
     <div v-if="store.client" class="text-center mt-8 pb-8">
       {{ t("index.you") }}<br />
-      <span class="font-bold">{{ store.client.alias }}</span>
+      <span class="font-bold cursor-pointer" @click="updateAlias">{{ store.client.alias }}</span>
     </div>
 
     <div
@@ -93,6 +93,27 @@ const targetId = ref("");
 const selectPeer = (id: string) => {
   targetId.value = id;
   openFileDialog();
+};
+
+const updateAlias = async () => {
+  if (!store.client) return;
+
+  const current = store.client;
+  if (!current) return;
+
+  const alias = prompt(t("index.enterAlias"), current.alias);
+  if (!alias || !store.signaling) return;
+
+  store.signaling.send({
+    type: "update",
+    alias: alias,
+    version: current.version,
+    deviceModel: current.deviceModel,
+    deviceType: current.deviceType,
+    fingerprint: current.fingerprint,
+  });
+
+  store.client.alias = alias;
 };
 
 onMounted(async () => {

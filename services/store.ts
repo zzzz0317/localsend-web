@@ -68,15 +68,19 @@ async function connectionLoop() {
         url: "wss://public.localsend.org/v1/ws",
         info: store._proposingClient!,
         onMessage: (data: WsServerMessage) => {
-          console.log(`Received message: ${JSON.stringify(data)}`);
           switch (data.type) {
             case "hello":
               store.client = data.client;
               store.peers = data.peers;
               break;
-            case "joined":
+            case "join":
               store.peers = [...store.peers, data.peer];
               break;
+            case "update":
+              store.peers = store.peers.map((p) =>
+                  p.id === data.peer.id ? data.peer : p,
+              );
+              break
             case "left":
               store.peers = store.peers.filter((p) => p.id !== data.peerId);
               break;
