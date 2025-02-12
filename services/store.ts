@@ -12,6 +12,7 @@ import {
   receiveFiles,
   sendFiles,
 } from "~/services/webrtc";
+import { generateFingerprint } from "~/services/crypto";
 
 export enum SessionState {
   idle = "idle",
@@ -34,6 +35,9 @@ export const store = reactive({
 
   // Client information of the current user that we send to the server
   _proposingClient: null as ClientInfoWithoutId | null,
+
+  // Public and private key pair for signing and verifying messages
+  key: null as CryptoKeyPair | null,
 
   // Signaling connection to the server
   signaling: null as SignalingConnection | null,
@@ -78,9 +82,9 @@ async function connectionLoop() {
               break;
             case "update":
               store.peers = store.peers.map((p) =>
-                  p.id === data.peer.id ? data.peer : p,
+                p.id === data.peer.id ? data.peer : p,
               );
-              break
+              break;
             case "left":
               store.peers = store.peers.filter((p) => p.id !== data.peerId);
               break;
@@ -90,6 +94,11 @@ async function connectionLoop() {
             case "answer":
               break;
           }
+        },
+        generateNewInfo: async () => {
+          const fingerprint = await generateFingerprint(store.key!);
+          updateFingerprintState(fingerprint);
+          return { ...store._proposingClient!, fingerprint };
         },
         onClose: () => {
           store.signaling = null;
@@ -104,6 +113,16 @@ async function connectionLoop() {
       await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait before retrying
     }
   }
+}
+
+export function updateAliasState(alias: string) {
+  store._proposingClient!.alias = alias;
+  store.client!.alias = alias;
+}
+
+function updateFingerprintState(fingerprint: string) {
+  store._proposingClient!.fingerprint = fingerprint;
+  store.client!.fingerprint = fingerprint;
 }
 
 export async function startSendSession({

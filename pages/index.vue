@@ -15,7 +15,9 @@
 
     <div v-if="store.client" class="text-center mt-8 pb-8">
       {{ t("index.you") }}<br />
-      <span class="font-bold cursor-pointer" @click="updateAlias">{{ store.client.alias }}</span>
+      <span class="font-bold cursor-pointer" @click="updateAlias">{{
+        store.client.alias
+      }}</span>
     </div>
 
     <div
@@ -54,12 +56,18 @@
 
 <script setup lang="ts">
 import { PeerDeviceType } from "@/services/signaling";
-import { setupConnection, startSendSession, store } from "@/services/store";
+import {
+  setupConnection,
+  startSendSession,
+  store,
+  updateAliasState,
+} from "@/services/store";
 import { getAgentInfoString } from "~/utils/userAgent";
 import { protocolVersion } from "~/services/webrtc";
 import { generateRandomAlias } from "~/utils/alias";
 import { useFileDialog } from "@vueuse/core";
 import SessionDialog from "~/components/dialog/SessionDialog.vue";
+import { generateEd25519KeyPair, generateFingerprint } from "~/services/crypto";
 
 definePageMeta({
   title: "index.seo.title",
@@ -113,7 +121,7 @@ const updateAlias = async () => {
     fingerprint: current.fingerprint,
   });
 
-  store.client.alias = alias;
+  updateAliasState(alias);
 };
 
 onMounted(async () => {
@@ -122,14 +130,17 @@ onMounted(async () => {
     minDelayFinished.value = true;
   }, 1000);
 
+  store.key = await generateEd25519KeyPair();
+
   const userAgent = navigator.userAgent;
+  const fingerprint = await generateFingerprint(store.key);
 
   const info = {
     alias: generateRandomAlias(),
     version: protocolVersion,
     deviceModel: getAgentInfoString(userAgent),
     deviceType: PeerDeviceType.web,
-    fingerprint: Math.random().toString(),
+    fingerprint: fingerprint,
   };
 
   await setupConnection(info);

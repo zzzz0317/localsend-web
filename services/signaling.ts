@@ -13,17 +13,20 @@ export class SignalingConnection {
    * @param url The URL of the signaling server.
    * @param info The client info to send to the server.
    * @param onMessage The callback to call when a message is received.
+   * @param generateNewInfo The function to generate and publish a new info.
    * @param onClose The callback to call when the connection is closed.
    */
   public static async connect({
     url,
     info,
     onMessage,
+    generateNewInfo,
     onClose,
   }: {
     url: string;
     info: ClientInfoWithoutId;
     onMessage: OnMessageCallback;
+    generateNewInfo: () => Promise<ClientInfoWithoutId>;
     onClose: () => void;
   }): Promise<SignalingConnection> {
     console.log(`Connecting to ${url}`);
@@ -40,9 +43,21 @@ export class SignalingConnection {
       socket.send("");
     }, 120 * 1000);
 
+    // every half hour, generate a new fingerprint
+    const fingerprintInterval = setInterval(
+      async () => {
+        const info = await generateNewInfo();
+        socket.send(
+          JSON.stringify({ type: "update", ...info } as WsClientUpdateMessage),
+        );
+      },
+      30 * 60 * 1000,
+    );
+
     socket.onclose = () => {
       console.log("Signaling connection closed");
       clearInterval(pingInterval);
+      clearInterval(fingerprintInterval);
       onClose();
     };
 
