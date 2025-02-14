@@ -1,4 +1,4 @@
-import { decodeBase64, encodeBase64 } from "~/utils/base64";
+import {decodeBase64, encodeBase64} from "~/utils/base64";
 
 /**
  * Generate an Ed25519 key pair (publicKey + privateKey).
@@ -9,6 +9,18 @@ export async function generateEd25519KeyPair(): Promise<CryptoKeyPair> {
     "sign",
     "verify",
   ])) as CryptoKeyPair;
+}
+
+export async function cryptoKeyToPem(cryptoKey: CryptoKey): Promise<string> {
+  const exported = await window.crypto.subtle.exportKey("spki", cryptoKey);
+  const exportedAsBase64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
+
+  // Format as PEM
+  const pemHeader = "-----BEGIN PUBLIC KEY-----\n";
+  const pemFooter = "\n-----END PUBLIC KEY-----";
+  const pemBody = exportedAsBase64.match(/.{1,64}/g)!.join("\n"); // Wrap lines at 64 chars
+
+  return pemHeader + pemBody + pemFooter;
 }
 
 /**
@@ -70,8 +82,7 @@ export async function verifyFingerprint(
   if (saltBuffer.byteLength !== 8) {
     return false;
   }
-  const saltView = new DataView(typedArrayToBuffer(saltBuffer));
-  const saltSeconds = Number(saltView.getBigUint64(0, false));
+  const saltSeconds = Number(decodeU64(saltBuffer));
 
   const nowInSeconds = Math.floor(Date.now() / 1000);
   if (nowInSeconds - saltSeconds > 60 * 60) {
@@ -101,10 +112,19 @@ export async function verifyFingerprint(
 
 function unixTimestampU64(): Uint8Array {
   const nowInSeconds = Math.floor(Date.now() / 1000);
+  return encodeU64(BigInt(nowInSeconds));
+}
+
+function encodeU64(value: bigint): Uint8Array {
   const saltBuffer = new ArrayBuffer(8);
   const saltView = new DataView(saltBuffer);
-  saltView.setBigUint64(0, BigInt(nowInSeconds), false);
+  saltView.setBigUint64(0, value, true);
   return new Uint8Array(saltBuffer);
+}
+
+function decodeU64(buffer: Uint8Array): bigint {
+  const saltView = new DataView(typedArrayToBuffer(buffer));
+  return saltView.getBigUint64(0, true);
 }
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
