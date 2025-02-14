@@ -67,7 +67,11 @@ import { protocolVersion } from "~/services/webrtc";
 import { generateRandomAlias } from "~/utils/alias";
 import { useFileDialog } from "@vueuse/core";
 import SessionDialog from "~/components/dialog/SessionDialog.vue";
-import {cryptoKeyToPem, generateEd25519KeyPair, generateFingerprint} from "~/services/crypto";
+import {
+  cryptoKeyToPem,
+  generateEd25519KeyPair,
+  generateFingerprint,
+} from "~/services/crypto";
 
 definePageMeta({
   title: "index.seo.title",

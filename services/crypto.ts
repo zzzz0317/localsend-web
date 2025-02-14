@@ -1,4 +1,4 @@
-import {decodeBase64, encodeBase64} from "~/utils/base64";
+import { decodeBase64, encodeBase64 } from "~/utils/base64";
 
 /**
  * Generate an Ed25519 key pair (publicKey + privateKey).
@@ -13,7 +13,9 @@ export async function generateEd25519KeyPair(): Promise<CryptoKeyPair> {
 
 export async function cryptoKeyToPem(cryptoKey: CryptoKey): Promise<string> {
   const exported = await window.crypto.subtle.exportKey("spki", cryptoKey);
-  const exportedAsBase64 = btoa(String.fromCharCode(...new Uint8Array(exported)));
+  const exportedAsBase64 = btoa(
+    String.fromCharCode(...new Uint8Array(exported)),
+  );
 
   // Format as PEM
   const pemHeader = "-----BEGIN PUBLIC KEY-----\n";
@@ -21,6 +23,33 @@ export async function cryptoKeyToPem(cryptoKey: CryptoKey): Promise<string> {
   const pemBody = exportedAsBase64.match(/.{1,64}/g)!.join("\n"); // Wrap lines at 64 chars
 
   return pemHeader + pemBody + pemFooter;
+}
+
+export async function publicKeyFromDer(der: Uint8Array): Promise<CryptoKey> {
+  return await window.crypto.subtle.importKey(
+    "spki",
+    der,
+    { name: "Ed25519" },
+    true,
+    ["verify"],
+  );
+}
+
+export async function publicKeyFromPem(pem: string): Promise<CryptoKey> {
+  // Remove PEM header and footer
+  const pemBody = pem
+    .split("\n")
+    .filter((line) => !line.includes("-----"))
+    .join("");
+
+  // Decode the base64 body
+  const der = new Uint8Array(
+    atob(pemBody)
+      .split("")
+      .map((c) => c.charCodeAt(0)),
+  );
+
+  return publicKeyFromDer(der);
 }
 
 /**
@@ -59,8 +88,8 @@ export async function generateFingerprint(key: CryptoKeyPair): Promise<string> {
 }
 
 export async function verifyFingerprint(
-  fingerprint: string,
   publicKey: CryptoKey,
+  fingerprint: string,
 ): Promise<boolean> {
   const parts = fingerprint.split(".");
   if (parts.length !== 5) {
