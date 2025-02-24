@@ -13,11 +13,29 @@
       </div>
     </div>
 
-    <div v-if="store.client" class="text-center mt-8 pb-8">
-      {{ t("index.you") }}<br />
-      <span class="font-bold cursor-pointer" @click="updateAlias">{{
-        store.client.alias
-      }}</span>
+    <div v-if="store.client" class="flex justify-center items-center mt-8 pb-8">
+      <div class="flex">
+        <div>
+          {{ t("index.you") }}<br />
+          <span class="font-bold cursor-pointer" @click="updateAlias">{{
+            store.client.alias
+          }}</span>
+        </div>
+
+        <div
+          class="inline-block h-14 w-[2px] bg-gray-300 dark:bg-gray-500 mx-4"
+        ></div>
+
+        <div class="pr-2">
+          <span>
+            {{ t("index.pin.label") }}
+          </span>
+          <br />
+          <span class="font-bold cursor-pointer" @click="updatePIN">
+            {{ store.pin ?? t("index.pin.none") }}
+          </span>
+        </div>
+      </div>
     </div>
 
     <div
@@ -69,8 +87,8 @@ import { useFileDialog } from "@vueuse/core";
 import SessionDialog from "~/components/dialog/SessionDialog.vue";
 import {
   cryptoKeyToPem,
+  generateClientTokenFromCurrentTimestamp,
   generateKeyPair,
-  generateClientToken,
 } from "~/services/crypto";
 
 definePageMeta({
@@ -117,15 +135,22 @@ const updateAlias = async () => {
   if (!alias || !store.signaling) return;
 
   store.signaling.send({
-    type: "update",
-    alias: alias,
-    version: current.version,
-    deviceModel: current.deviceModel,
-    deviceType: current.deviceType,
-    token: current.token,
+    type: "UPDATE",
+    info: {
+      alias: alias,
+      version: current.version,
+      deviceModel: current.deviceModel,
+      deviceType: current.deviceType,
+      token: current.token,
+    },
   });
 
   updateAliasState(alias);
+};
+
+const updatePIN = async () => {
+  const pin = prompt(t("index.enterPin"));
+  store.pin = pin ? pin : null;
 };
 
 onMounted(async () => {
@@ -139,7 +164,7 @@ onMounted(async () => {
   console.log(await cryptoKeyToPem(store.key.publicKey));
 
   const userAgent = navigator.userAgent;
-  const token = await generateClientToken(store.key);
+  const token = await generateClientTokenFromCurrentTimestamp(store.key);
 
   const info = {
     alias: generateRandomAlias(),
@@ -149,7 +174,12 @@ onMounted(async () => {
     token: token,
   };
 
-  await setupConnection(info);
+  await setupConnection({
+    info,
+    onPin: async () => {
+      return prompt(t("index.enterPin"));
+    },
+  });
 });
 </script>
 

@@ -11,6 +11,10 @@
       "lanHint": "Nur Geräte im selben Netzwerk werden angezeigt."
     },
     "you": "Du bist:",
+    "pin": {
+      "label": "PIN: ",
+      "none": "keine"
+    },
     "enterAlias": "Name eingeben",
     "enterPin": "PIN eingeben",
     "progress": {

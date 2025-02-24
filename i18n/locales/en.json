@@ -11,6 +11,10 @@
       "lanHint": "Only devices in the same network are shown."
     },
     "you": "You are:",
+    "pin": {
+      "label": "PIN: ",
+      "none": "none"
+    },
     "enterAlias": "Enter name",
     "enterPin": "Enter PIN",
     "progress": {

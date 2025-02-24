@@ -48,7 +48,10 @@ export class SignalingConnection {
       async () => {
         const info = await generateNewInfo();
         socket.send(
-          JSON.stringify({ type: "update", ...info } as WsClientUpdateMessage),
+          JSON.stringify({
+            type: "UPDATE",
+            info: info,
+          } as WsClientUpdateMessage),
         );
       },
       30 * 60 * 1000,
@@ -69,7 +72,7 @@ export class SignalingConnection {
       const message = JSON.parse(event.data) as WsServerMessage;
       console.log(`WS in: ${event.data}`);
       if (
-        message.type === "answer" &&
+        message.type === "ANSWER" &&
         instance._onAnswer &&
         message.sessionId === instance._onAnswer.sessionId
       ) {
@@ -138,23 +141,23 @@ export type WsServerMessage =
   | ErrorMessage;
 
 export type HelloMessage = {
-  type: "hello";
+  type: "HELLO";
   client: ClientInfo;
   peers: ClientInfo[];
 };
 
 export type JoinMessage = {
-  type: "join";
+  type: "JOIN";
   peer: ClientInfo;
 };
 
 export type UpdateMessage = {
-  type: "update";
+  type: "UPDATE";
   peer: ClientInfo;
 };
 
 export type LeftMessage = {
-  type: "left";
+  type: "LEFT";
   peerId: string;
 };
 
@@ -164,12 +167,12 @@ export type WsServerSdpMessage = {
   sdp: string;
 };
 
-export type OfferMessage = WsServerSdpMessage & { type: "offer" };
+export type OfferMessage = WsServerSdpMessage & { type: "OFFER" };
 
-export type AnswerMessage = WsServerSdpMessage & { type: "answer" };
+export type AnswerMessage = WsServerSdpMessage & { type: "ANSWER" };
 
 export type ErrorMessage = {
-  type: "error";
+  type: "ERROR";
   code: number;
 };
 
@@ -178,11 +181,12 @@ type OnMessageCallback = (message: WsServerMessage) => void;
 export type WsClientMessage = WsClientUpdateMessage | WsClientSdpMessage;
 
 export type WsClientUpdateMessage = {
-  type: "update";
-} & ClientInfoWithoutId;
+  type: "UPDATE";
+  info: ClientInfoWithoutId;
+};
 
 export type WsClientSdpMessage = {
-  type: "offer" | "answer";
+  type: "OFFER" | "ANSWER";
   sessionId: string;
   target: string;
   sdp: string;

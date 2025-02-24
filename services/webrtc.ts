@@ -6,6 +6,8 @@ import { decodeBase64, encodeBase64 } from "~/utils/base64";
 import { StreamController } from "~/utils/streamController";
 import pako from "pako";
 import { saveFileFromBytes } from "~/utils/fileSaver";
+import { generateNonce, validateNonce } from "~/utils/nonce";
+import { generateClientTokenFromNonce } from "~/services/crypto";
 
 export const protocolVersion = "2.3";
 
@@ -17,6 +19,8 @@ export async function sendFiles({
   fileDtoList,
   fileMap,
   targetId,
+  signingKey,
+  pin,
   onPin,
   onFilesSkip,
   onFileProgress,
@@ -26,6 +30,8 @@ export async function sendFiles({
   fileDtoList: FileDto[];
   fileMap: Record<string, File>;
   targetId: string;
+  signingKey: CryptoKeyPair;
+  pin?: PinConfig;
   onPin: () => Promise<string | null>;
   onFilesSkip: (fileIds: string[]) => void;
   onFileProgress: (progress: FileProgress) => void;
@@ -54,7 +60,7 @@ export async function sendFiles({
   const sessionId = Math.random().toString(36).substring(2, 15);
 
   signaling.send({
-    type: "offer",
+    type: "OFFER",
     sessionId: sessionId,
     target: targetId,
     sdp: encodeSdp(localSdp),
@@ -74,61 +80,141 @@ export async function sendFiles({
 
   await dataChannelOpened;
 
-  console.log("Data channel opened. Waiting for initial status...");
+  console.log("Data channel opened. Exchanging nonce...");
 
-  initLoop: while (true) {
-    const statusRaw = await dataChannelStream.readNext();
-    if (typeof statusRaw !== "string") {
-      throw new Error("Expected string");
-    }
-    const status = (JSON.parse(statusRaw) as RTCInitResponse).status;
+  const localNonce = await generateNonce();
+  dataChannel.send(
+    JSON.stringify({
+      nonce: encodeBase64(localNonce),
+    } as RTCNonceMessage),
+  );
+  const remoteNonce = await receiveNonce(dataChannelStream);
+  const nonce = new Uint8Array(localNonce.length + remoteNonce.length);
+  nonce.set(localNonce);
+  nonce.set(remoteNonce, localNonce.length);
 
-    console.log(`Received status: ${status}`);
+  console.log("Nonce exchanged. Exchanging token...");
 
-    switch (status) {
-      case RTCInitStatus.ok:
-        break initLoop;
-      case RTCInitStatus.pinRequired:
-        const pin = await onPin();
-        if (!pin) {
-          dataChannel.close();
-          return;
+  const localToken = await generateClientTokenFromNonce(signingKey, nonce);
+  dataChannel.send(
+    JSON.stringify({
+      token: localToken,
+    } as RTCTokenRequest),
+  );
+
+  const tokenResponseRaw = await dataChannelStream.readNext();
+  if (typeof tokenResponseRaw !== "string") {
+    throw new Error("Expected string");
+  }
+  const tokenResponse = JSON.parse(tokenResponseRaw) as RTCTokenResponse;
+  if (tokenResponse.status === "INVALID_SIGNATURE") {
+    console.error("Invalid signature");
+    return;
+  }
+
+  let remoteToken: string;
+  if (tokenResponse.status === "OK") {
+    remoteToken = tokenResponse.token;
+  } else if (tokenResponse.status === "PIN_REQUIRED") {
+    remoteToken = tokenResponse.token;
+    await handlePin<number>(
+      dataChannelStream,
+      dataChannel,
+      onPin,
+      false,
+      (response) => {
+        const parsed = JSON.parse(response) as RTCPinReceivingResponse;
+        if (
+          parsed.status === "PIN_REQUIRED" ||
+          parsed.status === "TOO_MANY_ATTEMPTS"
+        ) {
+          return parsed.status;
         }
+        return 1;
+      },
+    );
+  } else {
+    console.error("Invalid response");
+    return;
+  }
 
-        dataChannel.send(
+  console.log(`Received token: ${remoteToken}`);
+
+  if (pin) {
+    let remotePin = "";
+    let pinTry = 0;
+
+    while (true) {
+      if (remotePin === pin.pin) {
+        break;
+      }
+
+      if (pinTry >= pin.maxTries) {
+        sendStringInChunks(
+          dataChannel,
           JSON.stringify({
-            pin: pin,
-          } as RTCPinRequest),
+            status: "TOO_MANY_ATTEMPTS",
+          } as RTCPinSendingResponse),
         );
-        continue;
-      case RTCInitStatus.tooManyRequests:
-        console.error("Too many requests");
+
+        sendDelimiter(dataChannel);
+
+        await waitBufferEmpty(dataChannel);
         return;
+      }
+
+      sendStringInChunks(
+        dataChannel,
+        JSON.stringify({
+          status: "PIN_REQUIRED",
+        } as RTCPinSendingResponse),
+      );
+
+      sendDelimiter(dataChannel);
+
+      const remotePinRaw = await dataChannelStream.readNext();
+      if (typeof remotePinRaw !== "string") {
+        throw new Error("Expected string");
+      }
+      remotePin = (JSON.parse(remotePinRaw) as RTCPinMessage).pin;
+      pinTry++;
     }
   }
 
   sendStringInChunks(
     dataChannel,
-    JSON.stringify({ files: fileDtoList } as RTCFileListRequest),
+    JSON.stringify({
+      status: "OK",
+      files: fileDtoList,
+    } as RTCPinSendingResponse),
   );
 
   sendDelimiter(dataChannel);
 
   console.log("Sent file list. Waiting for selection...");
 
-  let dataChannelIterator = dataChannelStream.createAsyncIterator();
-  let chunks: ArrayBuffer[] = [];
-  for await (const chunk of dataChannelIterator.asyncIterator) {
-    if (typeof chunk === "string") {
-      break;
+  let fileListResponseRaw = await receiveStringFromChunks(dataChannelStream);
+  let fileListResponse = JSON.parse(fileListResponseRaw) as RTCFileListResponse;
+  let fileTokens: Record<string, string>;
+  if (fileListResponse.status === "OK") {
+    fileTokens = fileListResponse.files;
+  } else if (fileListResponse.status === "PAIR") {
+    console.log("Pairing required. Reject...");
+    dataChannel.send(
+      JSON.stringify({
+        status: "PAIR_DECLINED",
+      } as RTCPairResponse),
+    );
+    fileListResponseRaw = await receiveStringFromChunks(dataChannelStream);
+    fileListResponse = JSON.parse(fileListResponseRaw) as RTCFileListResponse;
+    if (fileListResponse.status === "OK") {
+      fileTokens = fileListResponse.files;
+    } else {
+      return;
     }
-    chunks.push(chunk);
+  } else {
+    return;
   }
-  dataChannelIterator.releaseLock();
-
-  const fileTokens = (
-    JSON.parse(arrayBufferToString(chunks)) as RTCFileListResponse
-  ).files;
 
   console.log(
     `Selected files: ${Object.keys(fileTokens).length} / ${fileDtoList.length}`,
@@ -215,14 +301,18 @@ export async function receiveFiles({
   signaling,
   stunServers,
   offer,
+  signingKey,
   pin,
+  onPin,
   selectFiles,
   onFileProgress,
 }: {
   signaling: SignalingConnection;
   stunServers: string[];
   offer: WsServerSdpMessage;
+  signingKey: CryptoKeyPair;
   pin?: PinConfig;
+  onPin: () => Promise<string | null>;
   selectFiles: (files: FileDto[]) => Promise<string[]>;
   onFileProgress: (progress: FileProgress) => void;
 }) {
@@ -251,7 +341,7 @@ export async function receiveFiles({
   console.log("Local SDP: ", localSdp);
 
   signaling.send({
-    type: "answer",
+    type: "ANSWER",
     sessionId: offer.sessionId,
     target: offer.peer.id,
     sdp: encodeSdp(localSdp),
@@ -270,13 +360,38 @@ export async function receiveFiles({
     dataChannel.onopen = () => resolve();
   });
 
-  console.log("Data channel opened.");
+  console.log("Data channel opened. Exchanging nonce...");
 
-  await waitBufferEmpty(dataChannel);
+  const remoteNonce = await receiveNonce(dataChannelStream);
+  const localNonce = await generateNonce();
+  dataChannel.send(
+    JSON.stringify({
+      nonce: encodeBase64(localNonce),
+    } as RTCNonceMessage),
+  );
+  const nonce = new Uint8Array(localNonce.length + remoteNonce.length);
+  nonce.set(remoteNonce);
+  nonce.set(localNonce, remoteNonce.length);
 
+  const remoteTokenRaw = await dataChannelStream.readNext();
+  if (typeof remoteTokenRaw !== "string") {
+    throw new Error("Expected string");
+  }
+
+  const remoteToken = JSON.parse(remoteTokenRaw) as RTCTokenRequest;
+  console.log(`Received token: ${remoteToken.token}`);
+
+  const localToken = await generateClientTokenFromNonce(signingKey, nonce);
   if (pin) {
     let remotePin = "";
     let pinTry = 0;
+
+    dataChannel.send(
+      JSON.stringify({
+        status: "PIN_REQUIRED",
+        token: localToken,
+      } as RTCTokenResponse),
+    );
 
     while (true) {
       if (remotePin === pin.pin) {
@@ -286,50 +401,77 @@ export async function receiveFiles({
       if (pinTry >= pin.maxTries) {
         dataChannel.send(
           JSON.stringify({
-            status: RTCInitStatus.tooManyRequests,
-          } as RTCInitResponse),
+            status: "TOO_MANY_ATTEMPTS",
+          } as RTCPinReceivingResponse),
         );
 
         await waitBufferEmpty(dataChannel);
         return;
       }
 
-      dataChannel.send(
-        JSON.stringify({
-          status: RTCInitStatus.pinRequired,
-        } as RTCInitResponse),
-      );
+      if (pinTry !== 0) {
+        dataChannel.send(
+          JSON.stringify({
+            status: "PIN_REQUIRED",
+          } as RTCPinReceivingResponse),
+        );
+      }
 
       const remotePinRaw = await dataChannelStream.readNext();
       if (typeof remotePinRaw !== "string") {
         throw new Error("Expected string");
       }
-      remotePin = (JSON.parse(remotePinRaw) as RTCPinRequest).pin;
+      remotePin = (JSON.parse(remotePinRaw) as RTCPinMessage).pin;
       pinTry++;
     }
+
+    dataChannel.send(
+      JSON.stringify({
+        status: "OK",
+      } as RTCPinReceivingResponse),
+    );
+  } else {
+    dataChannel.send(
+      JSON.stringify({
+        status: "OK",
+        token: localToken,
+      } as RTCTokenResponse),
+    );
   }
 
-  dataChannel.send(
-    JSON.stringify({
-      status: RTCInitStatus.ok,
-    } as RTCInitResponse),
-  );
+  console.log("Waiting for sender PIN status...");
 
-  console.log("Waiting for file list...");
-
-  let dataChannelIterator = dataChannelStream.createAsyncIterator();
-  let chunks: ArrayBuffer[] = [];
-  for await (const chunk of dataChannelIterator.asyncIterator) {
-    if (typeof chunk === "string") {
+  let pinSendingResponseRaw = await receiveStringFromChunks(dataChannelStream);
+  let pinSendingResponse = JSON.parse(
+    pinSendingResponseRaw,
+  ) as RTCPinSendingResponse;
+  let fileList: FileDto[];
+  switch (pinSendingResponse.status) {
+    case "OK":
+      fileList = pinSendingResponse.files;
       break;
-    }
-    chunks.push(chunk);
+    case "TOO_MANY_ATTEMPTS":
+      console.error("Too many attempts");
+      return;
+    case "PIN_REQUIRED":
+      fileList = await handlePin<FileDto[]>(
+        dataChannelStream,
+        dataChannel,
+        onPin,
+        true,
+        (response) => {
+          const parsed = JSON.parse(response) as RTCPinSendingResponse;
+          if (
+            parsed.status === "PIN_REQUIRED" ||
+            parsed.status === "TOO_MANY_ATTEMPTS"
+          ) {
+            return parsed.status;
+          }
+          return parsed.files;
+        },
+      );
+      break;
   }
-  dataChannelIterator.releaseLock();
-
-  const fileList = (
-    JSON.parse(arrayBufferToString(chunks)) as RTCFileListRequest
-  ).files;
 
   console.log("Received file list:", fileList);
 
@@ -349,6 +491,7 @@ export async function receiveFiles({
   sendStringInChunks(
     dataChannel,
     JSON.stringify({
+      status: "OK",
       files: selectedFilesTokens,
     } as RTCFileListResponse),
   );
@@ -357,7 +500,7 @@ export async function receiveFiles({
 
   console.log("Receiving files...");
 
-  dataChannelIterator = dataChannelStream.createAsyncIterator();
+  const dataChannelIterator = dataChannelStream.createAsyncIterator();
   let fileState: { id: string; chunks: ArrayBuffer[]; curr: number } | null =
     null;
   for await (const chunk of dataChannelIterator.asyncIterator) {
@@ -481,27 +624,74 @@ export type FileMetadata = {
   accessed?: string;
 };
 
-type RTCInitResponse = {
-  status: RTCInitStatus;
+type RTCNonceMessage = {
+  nonce: string;
 };
 
-enum RTCInitStatus {
-  ok = "ok",
-  pinRequired = "pinRequired",
-  tooManyRequests = "tooManyRequests",
-}
+type RTCTokenRequest = {
+  token: string;
+};
 
-type RTCPinRequest = {
+type RTCTokenResponse =
+  | {
+      status: "OK";
+      token: string;
+    }
+  | {
+      status: "PIN_REQUIRED";
+      token: string;
+    }
+  | {
+      status: "INVALID_SIGNATURE";
+    };
+
+type RTCPinMessage = {
   pin: string;
 };
 
-type RTCFileListRequest = {
-  files: FileDto[];
+type RTCPinReceivingResponse = {
+  status: "OK" | "PIN_REQUIRED" | "TOO_MANY_ATTEMPTS";
 };
 
-type RTCFileListResponse = {
-  files: Record<string, string>;
-};
+type RTCPinSendingResponse =
+  | {
+      status: "OK";
+      files: FileDto[];
+    }
+  | {
+      status: "PIN_REQUIRED";
+    }
+  | {
+      status: "TOO_MANY_ATTEMPTS";
+    };
+
+type RTCFileListResponse =
+  | {
+      status: "OK";
+      files: Record<string, string>;
+    }
+  | {
+      status: "PAIR";
+      publicKey: string;
+    }
+  | {
+      status: "DECLINED";
+    }
+  | {
+      status: "INVALID_SIGNATURE";
+    };
+
+type RTCPairResponse =
+  | {
+      status: "OK";
+      publicKey: string;
+    }
+  | {
+      status: "PAIR_DECLINED";
+    }
+  | {
+      status: "INVALID_SIGNATURE";
+    };
 
 type RTCSendFileHeaderRequest = {
   id: string;
@@ -529,6 +719,86 @@ function decodeSdp(s: string): string {
   }
 
   return new TextDecoder().decode(decompressed);
+}
+
+async function receiveNonce(
+  dataChannelStream: StreamController<string | ArrayBuffer>,
+): Promise<Uint8Array> {
+  const remoteNonce = await dataChannelStream.readNext();
+  if (typeof remoteNonce !== "string") {
+    throw new Error("Expected string");
+  }
+
+  const nonceMsg = JSON.parse(remoteNonce) as RTCNonceMessage;
+  const decodedNonce = decodeBase64(nonceMsg.nonce);
+
+  if (!validateNonce(decodedNonce)) {
+    throw new Error("Invalid remote nonce");
+  }
+
+  return decodedNonce;
+}
+
+// Note: Type <T> must be **not** a string.
+async function handlePin<T>(
+  dataChannelStream: StreamController<string | ArrayBuffer>,
+  dataChannel: RTCDataChannel,
+  onPin: () => Promise<string | null>,
+  receiveInChunks: boolean,
+  parseResponse: (response: string) => T | "PIN_REQUIRED" | "TOO_MANY_ATTEMPTS",
+): Promise<T> {
+  while (true) {
+    const pin = await onPin();
+    if (!pin) {
+      dataChannel.close();
+      throw new Error("PIN required");
+    }
+
+    dataChannel.send(
+      JSON.stringify({
+        pin: pin,
+      } as RTCPinMessage),
+    );
+
+    let response: string;
+    if (receiveInChunks) {
+      response = await receiveStringFromChunks(dataChannelStream);
+    } else {
+      const tmp = await dataChannelStream.readNext();
+      if (typeof tmp !== "string") {
+        throw new Error("Expected string");
+      }
+      response = tmp;
+    }
+
+    const parsedResponse = parseResponse(response);
+    if (parsedResponse && typeof parsedResponse !== "string") {
+      return parsedResponse as T;
+    }
+
+    switch (parsedResponse) {
+      case "PIN_REQUIRED":
+        break;
+      case "TOO_MANY_ATTEMPTS":
+        throw new Error("Too many attempts");
+    }
+  }
+}
+
+async function receiveStringFromChunks(
+  dataChannelStream: StreamController<string | ArrayBuffer>,
+): Promise<string> {
+  let dataChannelIterator = dataChannelStream.createAsyncIterator();
+  let chunks: ArrayBuffer[] = [];
+  for await (const chunk of dataChannelIterator.asyncIterator) {
+    if (typeof chunk === "string") {
+      break;
+    }
+    chunks.push(chunk);
+  }
+  dataChannelIterator.releaseLock();
+
+  return arrayBufferToString(chunks);
 }
 
 function sendDelimiter(dataChannel: RTCDataChannel) {

@@ -95,12 +95,21 @@ export async function publicKeyFromPem(pem: string): Promise<CryptoKey> {
  *  4) SIGN_METHOD (e.g. "ed25519")
  *  5) SIGN (base64-url-no-padding of Ed25519 signature over HASH)
  */
-export async function generateClientToken(key: CryptoKeyPair): Promise<string> {
+export async function generateClientTokenFromCurrentTimestamp(
+  key: CryptoKeyPair,
+): Promise<string> {
+  const salt = unixTimestampU64();
+  return await generateClientTokenFromNonce(key, salt);
+}
+
+export async function generateClientTokenFromNonce(
+  key: CryptoKeyPair,
+  nonce: Uint8Array,
+): Promise<string> {
   const publicKeyDER = new Uint8Array(
     await window.crypto.subtle.exportKey("spki", key.publicKey),
   );
-  const salt = unixTimestampU64();
-  const hashInput = concatBytes(publicKeyDER, salt);
+  const hashInput = concatBytes(publicKeyDER, nonce);
   const digest = await window.crypto.subtle.digest("SHA-256", hashInput);
   const signature = await window.crypto.subtle.sign(
     selectedParams.sign,
@@ -110,7 +119,7 @@ export async function generateClientToken(key: CryptoKeyPair): Promise<string> {
 
   const hashMethod = "sha256";
   const hashBase64 = encodeBase64(new Uint8Array(digest));
-  const saltBase64 = encodeBase64(salt);
+  const saltBase64 = encodeBase64(nonce);
   const signMethod = selectedParams.identifier;
   const signatureBase64 = encodeBase64(new Uint8Array(signature));
 
@@ -119,11 +128,11 @@ export async function generateClientToken(key: CryptoKeyPair): Promise<string> {
   );
 }
 
-export async function verifyFingerprint(
+export async function verifyToken(
   publicKey: CryptoKey,
-  fingerprint: string,
+  token: string,
 ): Promise<boolean> {
-  const parts = fingerprint.split(".");
+  const parts = token.split(".");
   if (parts.length !== 5) {
     return false;
   }

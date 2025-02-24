@@ -12,7 +12,7 @@ import {
   receiveFiles,
   sendFiles,
 } from "~/services/webrtc";
-import { generateClientToken } from "~/services/crypto";
+import { generateClientTokenFromCurrentTimestamp } from "~/services/crypto";
 
 export enum SessionState {
   idle = "idle",
@@ -36,8 +36,13 @@ export const store = reactive({
   // Client information of the current user that we send to the server
   _proposingClient: null as ClientInfoWithoutId | null,
 
+  _onPin: null as (() => Promise<string | null>) | null,
+
   // Public and private key pair for signing and verifying messages
   key: null as CryptoKeyPair | null,
+
+  /// PIN code used before receiving or sending files
+  pin: null as string | null,
 
   // Signaling connection to the server
   signaling: null as SignalingConnection | null,
@@ -57,8 +62,15 @@ export const store = reactive({
   },
 });
 
-export async function setupConnection(info: ClientInfoWithoutId) {
+export async function setupConnection({
+  info,
+  onPin,
+}: {
+  info: ClientInfoWithoutId;
+  onPin: () => Promise<string | null>;
+}) {
   store._proposingClient = info;
+  store._onPin = onPin;
   if (!store._loopStarted) {
     store._loopStarted = true;
     connectionLoop().then(() => console.log("Connection loop ended"));
@@ -73,30 +85,32 @@ async function connectionLoop() {
         info: store._proposingClient!,
         onMessage: (data: WsServerMessage) => {
           switch (data.type) {
-            case "hello":
+            case "HELLO":
               store.client = data.client;
               store.peers = data.peers;
               break;
-            case "join":
+            case "JOIN":
               store.peers = [...store.peers, data.peer];
               break;
-            case "update":
+            case "UPDATE":
               store.peers = store.peers.map((p) =>
                 p.id === data.peer.id ? data.peer : p,
               );
               break;
-            case "left":
+            case "LEFT":
               store.peers = store.peers.filter((p) => p.id !== data.peerId);
               break;
-            case "offer":
-              acceptOffer({ offer: data });
+            case "OFFER":
+              acceptOffer({ offer: data, onPin: store._onPin! });
               break;
-            case "answer":
+            case "ANSWER":
               break;
           }
         },
         generateNewInfo: async () => {
-          const token = await generateClientToken(store.key!);
+          const token = await generateClientTokenFromCurrentTimestamp(
+            store.key!,
+          );
           updateClientTokenState(token);
           return { ...store._proposingClient!, token };
         },
@@ -124,6 +138,8 @@ function updateClientTokenState(token: string) {
   store._proposingClient!.token = token;
   store.client!.token = token;
 }
+
+const PIN_MAX_TRIES = 3;
 
 export async function startSendSession({
   files,
@@ -164,6 +180,8 @@ export async function startSendSession({
       fileDtoList: fileDtoList,
       fileMap: fileMap,
       targetId: targetId,
+      signingKey: store.key!,
+      pin: store.pin ? { pin: store.pin, maxTries: PIN_MAX_TRIES } : undefined,
       onPin: onPin,
       onFilesSkip: (fileIds) => {
         for (const id of fileIds) {
@@ -195,7 +213,13 @@ function convertFileListToDto(files: FileList): FileDto[] {
   return result;
 }
 
-export async function acceptOffer({ offer }: { offer: WsServerSdpMessage }) {
+export async function acceptOffer({
+  offer,
+  onPin,
+}: {
+  offer: WsServerSdpMessage;
+  onPin: () => Promise<string | null>;
+}) {
   store.session.state = SessionState.receiving;
 
   try {
@@ -203,6 +227,9 @@ export async function acceptOffer({ offer }: { offer: WsServerSdpMessage }) {
       signaling: store.signaling as SignalingConnection,
       stunServers: defaultStun,
       offer: offer,
+      signingKey: store.key!,
+      pin: store.pin ? { pin: store.pin, maxTries: PIN_MAX_TRIES } : undefined,
+      onPin: onPin,
       selectFiles: async (files) => {
         // Select all files
         store.session.curr = 0;
