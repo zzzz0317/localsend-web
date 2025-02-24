@@ -1,14 +1,46 @@
 import { decodeBase64, encodeBase64 } from "~/utils/base64";
 
+const cryptoParams = {
+  ed25519: {
+    identifier: "ed25519",
+    generate: { name: "Ed25519" },
+    import: { name: "Ed25519" },
+    sign: { name: "Ed25519" },
+  },
+  rsaPss: {
+    identifier: "rsa-pss",
+    generate: {
+      name: "RSA-PSS",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    import: {
+      name: "RSA-PSS",
+      hash: "SHA-256",
+    },
+    sign: {
+      name: "RSA-PSS",
+      saltLength: 32,
+    },
+  },
+};
+
+// TODO: Change to Ed25519 when supported by all browsers.
+// Currently, Chrome does not support Ed25519 in the WebCrypto API.
+// https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/generateKey#browser_compatibility
+const selectedParams = cryptoParams.rsaPss;
+
 /**
- * Generate an Ed25519 key pair (publicKey + privateKey).
+ * Generate a key pair (publicKey + privateKey).
  * Both keys are exportable.
  */
-export async function generateEd25519KeyPair(): Promise<CryptoKeyPair> {
-  return (await window.crypto.subtle.generateKey({ name: "Ed25519" }, true, [
-    "sign",
-    "verify",
-  ])) as CryptoKeyPair;
+export async function generateKeyPair(): Promise<CryptoKeyPair> {
+  return (await window.crypto.subtle.generateKey(
+    selectedParams.generate,
+    true,
+    ["sign", "verify"],
+  )) as CryptoKeyPair;
 }
 
 export async function cryptoKeyToPem(cryptoKey: CryptoKey): Promise<string> {
@@ -29,7 +61,7 @@ export async function publicKeyFromDer(der: Uint8Array): Promise<CryptoKey> {
   return await window.crypto.subtle.importKey(
     "spki",
     der,
-    { name: "Ed25519" },
+    selectedParams.import,
     true,
     ["verify"],
   );
@@ -71,7 +103,7 @@ export async function generateFingerprint(key: CryptoKeyPair): Promise<string> {
   const hashInput = concatBytes(publicKeyDER, salt);
   const digest = await window.crypto.subtle.digest("SHA-256", hashInput);
   const signature = await window.crypto.subtle.sign(
-    { name: "Ed25519" },
+    selectedParams.sign,
     key.privateKey,
     digest,
   );
@@ -79,7 +111,7 @@ export async function generateFingerprint(key: CryptoKeyPair): Promise<string> {
   const hashMethod = "sha256";
   const hashBase64 = encodeBase64(new Uint8Array(digest));
   const saltBase64 = encodeBase64(salt);
-  const signMethod = "ed25519";
+  const signMethod = selectedParams.identifier;
   const signatureBase64 = encodeBase64(new Uint8Array(signature));
 
   return [hashMethod, hashBase64, saltBase64, signMethod, signatureBase64].join(
@@ -102,7 +134,7 @@ export async function verifyFingerprint(
     return false;
   }
 
-  if (signMethod !== "ed25519") {
+  if (signMethod !== selectedParams.identifier) {
     return false;
   }
 
@@ -132,7 +164,7 @@ export async function verifyFingerprint(
 
   const signatureBuffer = decodeBase64(signB64);
   return await crypto.subtle.verify(
-    { name: "ed25519" },
+    selectedParams.sign,
     publicKey,
     signatureBuffer,
     digest,

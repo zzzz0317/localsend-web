@@ -69,7 +69,7 @@ import { useFileDialog } from "@vueuse/core";
 import SessionDialog from "~/components/dialog/SessionDialog.vue";
 import {
   cryptoKeyToPem,
-  generateEd25519KeyPair,
+  generateKeyPair,
   generateFingerprint,
 } from "~/services/crypto";
 
@@ -134,7 +134,7 @@ onMounted(async () => {
     minDelayFinished.value = true;
   }, 1000);
 
-  store.key = await generateEd25519KeyPair();
+  store.key = await generateKeyPair();
 
   console.log(await cryptoKeyToPem(store.key.publicKey));
 
