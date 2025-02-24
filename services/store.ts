@@ -12,7 +12,7 @@ import {
   receiveFiles,
   sendFiles,
 } from "~/services/webrtc";
-import { generateFingerprint } from "~/services/crypto";
+import { generateClientToken } from "~/services/crypto";
 
 export enum SessionState {
   idle = "idle",
@@ -96,9 +96,9 @@ async function connectionLoop() {
           }
         },
         generateNewInfo: async () => {
-          const fingerprint = await generateFingerprint(store.key!);
-          updateFingerprintState(fingerprint);
-          return { ...store._proposingClient!, fingerprint };
+          const token = await generateClientToken(store.key!);
+          updateClientTokenState(token);
+          return { ...store._proposingClient!, token };
         },
         onClose: () => {
           store.signaling = null;
@@ -120,9 +120,9 @@ export function updateAliasState(alias: string) {
   store.client!.alias = alias;
 }
 
-function updateFingerprintState(fingerprint: string) {
-  store._proposingClient!.fingerprint = fingerprint;
-  store.client!.fingerprint = fingerprint;
+function updateClientTokenState(token: string) {
+  store._proposingClient!.token = token;
+  store.client!.token = token;
 }
 
 export async function startSendSession({

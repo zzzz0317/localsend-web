@@ -70,7 +70,7 @@ import SessionDialog from "~/components/dialog/SessionDialog.vue";
 import {
   cryptoKeyToPem,
   generateKeyPair,
-  generateFingerprint,
+  generateClientToken,
 } from "~/services/crypto";
 
 definePageMeta({
@@ -122,7 +122,7 @@ const updateAlias = async () => {
     version: current.version,
     deviceModel: current.deviceModel,
     deviceType: current.deviceType,
-    fingerprint: current.fingerprint,
+    token: current.token,
   });
 
   updateAliasState(alias);
@@ -139,14 +139,14 @@ onMounted(async () => {
   console.log(await cryptoKeyToPem(store.key.publicKey));
 
   const userAgent = navigator.userAgent;
-  const fingerprint = await generateFingerprint(store.key);
+  const token = await generateClientToken(store.key);
 
   const info = {
     alias: generateRandomAlias(),
     version: protocolVersion,
     deviceModel: getAgentInfoString(userAgent),
     deviceType: PeerDeviceType.web,
-    fingerprint: fingerprint,
+    token: token,
   };
 
   await setupConnection(info);

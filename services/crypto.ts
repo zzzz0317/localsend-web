@@ -85,7 +85,7 @@ export async function publicKeyFromPem(pem: string): Promise<CryptoKey> {
 }
 
 /**
- * Generates a fingerprint with the following structure:
+ * Generates a client token with the following structure:
  *
  *  HASH_METHOD.HASH.SALT_BASE64.SIGN_METHOD.SIGN
  *
@@ -95,7 +95,7 @@ export async function publicKeyFromPem(pem: string): Promise<CryptoKey> {
  *  4) SIGN_METHOD (e.g. "ed25519")
  *  5) SIGN (base64-url-no-padding of Ed25519 signature over HASH)
  */
-export async function generateFingerprint(key: CryptoKeyPair): Promise<string> {
+export async function generateClientToken(key: CryptoKeyPair): Promise<string> {
   const publicKeyDER = new Uint8Array(
     await window.crypto.subtle.exportKey("spki", key.publicKey),
   );

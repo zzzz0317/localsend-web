@@ -115,7 +115,7 @@ export type ClientInfoWithoutId = {
   version: string;
   deviceModel?: string;
   deviceType?: PeerDeviceType;
-  fingerprint: string;
+  token: string;
 };
 
 export type ClientInfo = ClientInfoWithoutId & { id: string };
