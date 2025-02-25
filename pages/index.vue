@@ -23,7 +23,7 @@
         </div>
 
         <div
-          class="inline-block h-14 w-[2px] bg-gray-300 dark:bg-gray-500 mx-4"
+          class="inline-block h-12 w-[2px] bg-gray-300 dark:bg-gray-700 mx-4"
         ></div>
 
         <div class="pr-2">
@@ -150,7 +150,9 @@ const updateAlias = async () => {
 
 const updatePIN = async () => {
   const pin = prompt(t("index.enterPin"));
-  store.pin = pin ? pin : null;
+  if (typeof pin === "string") {
+    store.pin = pin ? pin : null;
+  }
 };
 
 onMounted(async () => {
