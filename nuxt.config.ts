@@ -36,6 +36,12 @@ export default defineNuxtConfig({
         name: "English",
         isCatchallLocale: true,
       },
+      {
+        code: "tr",
+        language: "tr-TR",
+        file: "tr.json",
+        name: "Türkçe",
+      },
     ],
   },
   nitro: {
