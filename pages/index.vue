@@ -43,7 +43,11 @@
       class="flex-1 flex flex-col items-center justify-center text-center px-2"
     >
       <h3 v-if="minDelayFinished" class="text-3xl">
-        {{ t("index.connecting") }}
+        {{
+          webCryptoSupported
+            ? t("index.connecting")
+            : t("index.webCryptoNotSupported")
+        }}
       </h3>
     </div>
 
@@ -89,6 +93,8 @@ import {
   cryptoKeyToPem,
   generateClientTokenFromCurrentTimestamp,
   generateKeyPair,
+  isWebCryptoSupported,
+  upgradeToEd25519IfSupported,
 } from "~/services/crypto";
 
 definePageMeta({
@@ -117,6 +123,7 @@ onChange(async (files) => {
 });
 
 const minDelayFinished = ref(false);
+const webCryptoSupported = ref(true);
 
 const targetId = ref("");
 
@@ -156,10 +163,20 @@ const updatePIN = async () => {
 };
 
 onMounted(async () => {
+  webCryptoSupported.value = isWebCryptoSupported();
+
   setTimeout(() => {
     // to prevent flickering during initial connection
+    // i.e. show blank screen instead of "Connecting..."
     minDelayFinished.value = true;
   }, 1000);
+
+  if (!webCryptoSupported.value) {
+    console.error("Web Crypto API is not supported in this browser.");
+    return;
+  }
+
+  await upgradeToEd25519IfSupported();
 
   store.key = await generateKeyPair();
 

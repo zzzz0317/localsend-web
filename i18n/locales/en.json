@@ -5,6 +5,7 @@
       "description": "Share files between your browser and other devices running LocalSend."
     },
     "connecting": "Connecting...",
+    "webCryptoNotSupported": "Your browser does not support LocalSend: Web Crypto API is required.",
     "empty": {
       "title": "Open LocalSend on another device.",
       "deviceHint": "Open this site in another browser or native version (v1.18.0 or newer).",

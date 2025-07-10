@@ -1,5 +1,12 @@
 import { decodeBase64, encodeBase64 } from "~/utils/base64";
 
+type CryptoParams = {
+  identifier: string;
+  generate: AlgorithmIdentifier;
+  import: AlgorithmIdentifier;
+  sign: AlgorithmIdentifier;
+};
+
 const cryptoParams = {
   ed25519: {
     identifier: "ed25519",
@@ -26,10 +33,31 @@ const cryptoParams = {
   },
 };
 
-// TODO: Change to Ed25519 when supported by all browsers.
-// Currently, Chrome does not support Ed25519 in the WebCrypto API.
+// Older Chrome versions do not support Ed25519 in the WebCrypto API.
 // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/generateKey#browser_compatibility
-const selectedParams = cryptoParams.rsaPss;
+let selectedParams: CryptoParams = cryptoParams.rsaPss;
+
+export function isWebCryptoSupported(): boolean {
+  return (
+    window.crypto &&
+    window.crypto.subtle &&
+    "generateKey" in window.crypto.subtle
+  );
+}
+
+export async function upgradeToEd25519IfSupported(): Promise<void> {
+  try {
+    await window.crypto.subtle.generateKey(
+      cryptoParams.ed25519.generate,
+      true,
+      ["sign", "verify"],
+    );
+    selectedParams = cryptoParams.ed25519;
+    console.log("Switched to Ed25519 for cryptographic operations.");
+  } catch (e) {
+    console.warn("Ed25519 not supported.");
+  }
+}
 
 /**
  * Generate a key pair (publicKey + privateKey).
